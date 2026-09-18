@@ -1,0 +1,49 @@
+{
+  "name": "optera-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint src tests --ext .ts",
+    "format": "prettier --write src tests prisma",
+    "test": "vitest run tests",
+    "test:integration": "vitest run tests/integration",
+    "prisma:generate": "prisma generate",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/multipart": "^10.1.1",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/swagger-ui": "^6.1.1",
+    "@prisma/client": "^6.12.0",
+    "decimal.js": "^10.5.0",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.12.4",
+    "fastify-plugin": "^5.0.1",
+    "prisma": "^6.12.0",
+    "xlsx": "0.18.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "@typescript-eslint/eslint-plugin": "^8.70.0",
+    "@typescript-eslint/parser": "^8.70.0",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript": "^5.5.4",
+    "vite": "^6.4.3",
+    "vitest": "^5.0.0"
+  }
+}

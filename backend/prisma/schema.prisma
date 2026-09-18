@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OptionType {
+  CALL
+  PUT
+}
+
+enum Side {
+  BUY
+  SELL
+}
+
+model Operation {
+  id                    String      @id @default(uuid()) @db.Uuid
+  asset                 String
+  optionTicker          String
+  optionType            OptionType
+  side                  Side
+  expirationDate        DateTime    @db.Date
+  strike                Decimal     @db.Decimal(18, 6)
+  quantity              Int
+  openedAt              DateTime    @db.Date
+  entryPremium          Decimal     @db.Decimal(18, 6)
+  simulatedClosingPrice Decimal     @db.Decimal(18, 6)
+  closedAt              DateTime?   @db.Date
+  actualClosingPrice    Decimal?    @db.Decimal(18, 6)
+  strategyId            String?     @db.Uuid
+  notes                 String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  strategy              Strategy?   @relation(fields: [strategyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([asset])
+  @@index([strategyId])
+  @@index([expirationDate])
+  @@index([closedAt])
+  @@index([optionType])
+  @@index([side])
+}
+
+model Strategy {
+  id         String      @id @default(uuid()) @db.Uuid
+  name       String
+  asset      String
+  type       String?
+  openedAt   DateTime    @db.Date
+  notes      String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  operations Operation[]
+}
