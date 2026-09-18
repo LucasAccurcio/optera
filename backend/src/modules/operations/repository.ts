@@ -19,7 +19,12 @@ export class OperationRepository {
     return this.prisma.operation.delete({ where: { id } });
   }
 
-  findMany(where: Prisma.OperationWhereInput, skip: number, take: number, orderBy: Prisma.OperationOrderByWithRelationInput) {
+  findMany(
+    where: Prisma.OperationWhereInput,
+    skip: number,
+    take: number,
+    orderBy: Prisma.OperationOrderByWithRelationInput
+  ) {
     return Promise.all([
       this.prisma.operation.findMany({ where, skip, take, orderBy }),
       this.prisma.operation.count({ where }),
@@ -35,7 +40,7 @@ export class OperationRepository {
       this.prisma.operation.findMany({
         where,
         take: 100,
-        orderBy: { expirationDate: "asc" },
+        orderBy: { expirationDate: 'asc' },
       }),
       this.prisma.operation.count({ where }),
     ]);
