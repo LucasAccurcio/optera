@@ -3,7 +3,9 @@ import {
   createOperation,
   deleteStrategy,
   getHealth,
+  getQuotes,
   normalizeDecimalInput,
+  refreshQuotes,
 } from './client';
 
 describe('health client', () => {
@@ -57,6 +59,39 @@ describe('health client', () => {
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
     expect(fetchMock.mock.calls[0][1].headers).toEqual({
       Accept: 'application/json',
+    });
+  });
+
+  it('gets the quote snapshot from the exact quotes path', async () => {
+    const response = {
+      data: [{ asset: 'PETR4', price: null, timestamp: null, source: 'brapi', delayed: true, lastError: null }],
+      updatedAt: null,
+      warnings: [],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => response,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getQuotes()).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:3001/quotes', {
+      headers: { Accept: 'application/json' },
+    });
+  });
+
+  it('posts to the exact quote refresh path and surfaces refresh errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: { message: 'A quote refresh is already in progress' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(refreshQuotes()).rejects.toThrow('A quote refresh is already in progress');
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:3001/quotes/refresh', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
     });
   });
 });

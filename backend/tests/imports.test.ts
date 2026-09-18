@@ -12,7 +12,7 @@ const headers = ["Ativo", "Ticket", "Operação", "Tipo (CALL/PUT)", "Vencimento
 
 describe("operations import", () => {
   it("maps Excel dates and ignores empty rows", () => {
-    const parsed = parseOperationsWorkbook(workbook([headers, ["BBSE3", "BBSEV436", "Venda", "PUT", new Date("2026-12-18T00:00:00Z"), 40, 100, new Date("2026-01-10T00:00:00Z"), 1, null, null, "planilha"], [null, null], ["PETR4", "PETRX1", "Compra", "CALL", "2026-12-18", 30, 10, "2026-01-10", "2,50", "2026-02-01", "2,80", null]]));
+    const parsed = parseOperationsWorkbook(workbook([headers, ["BBSE3", "BBSEV436", "Venda", "PUT", new Date("2026-12-18T12:00:00Z"), 40, 100, new Date("2026-01-10T12:00:00Z"), 1, null, null, "planilha"], [null, null], ["PETR4", "PETRX1", "Compra", "CALL", "2026-12-18", 30, 10, "2026-01-10", "2,50", "2026-02-01", "2,80", null]]));
     expect(parsed.operations).toHaveLength(2);
     expect(parsed.operations[0].operation).toMatchObject({ optionType: "PUT", side: "SELL", expirationDate: "2026-12-18", openedAt: "2026-01-10", entryPremium: "1" });
     expect(parsed.operations[1].operation).toMatchObject({ side: "BUY", closedAt: "2026-02-01", actualClosingPrice: "2.8" });
@@ -33,7 +33,8 @@ describe("operations import", () => {
     const service = new ImportService(prisma as any);
     const result = await service.commit(workbook([headers, ["BBSE3", "BBSEV436", "Venda", "PUT", "2026-12-18", 40, 100, "2026-01-10", 1]]));
     expect(result.committed).toBe(true);
-    expect(created[0]).toMatchObject({ simulatedClosingPrice: "0.4", strategy: undefined });
+    expect(created[0]).toMatchObject({ simulatedClosingPrice: "0.4" });
+    expect(created[0].strategy).toBeUndefined();
     expect(created[0].closedAt).toBeUndefined();
   });
 });

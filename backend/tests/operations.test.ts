@@ -62,6 +62,8 @@ function prismaMock(initial = operation()) {
               return false;
             if (where.optionType && item.optionType !== where.optionType)
               return false;
+            if (where.strategyId === null && item.strategyId !== null)
+              return false;
             return true;
           })
           .slice(skip, skip + take),
@@ -76,6 +78,8 @@ function prismaMock(initial = operation()) {
               .toLowerCase()
               .includes(where.asset.contains.toLowerCase())
           )
+              return false;
+          if (where.strategyId === null && item.strategyId !== null)
             return false;
           return true;
         }).length,
@@ -144,6 +148,31 @@ describe("operation service", () => {
       result: "60",
       resultPercentage: "0.6",
     });
+  });
+
+  it("lists only open operations that are not associated with a strategy", async () => {
+    const prisma = prismaMock();
+    const associated = operation({
+      id: "6f6d8d13-5e23-4f64-8e38-08ea34a1f2d1",
+      strategyId: "7f6d8d13-5e23-4f64-8e38-08ea34a1f2d1",
+    });
+    prisma.operation.findMany = async ({ where, take }: any) =>
+      [operation(), associated]
+        .filter((item) => where.closedAt === null && item.closedAt === null)
+        .filter((item) => where.strategyId === null && item.strategyId === null)
+        .slice(0, take);
+    prisma.operation.count = async ({ where }: any) =>
+      [operation(), associated].filter(
+        (item) => where.closedAt === null && item.closedAt === null,
+      ).filter((item) => where.strategyId === null && item.strategyId === null)
+        .length;
+
+    const service = new OperationService(prisma as any);
+    const result = await service.listAvailableForStrategy();
+
+    expect(result.meta.total).toBe(1);
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].strategyId).toBeNull();
   });
 
   it("returns a not found error for missing operations", async () => {

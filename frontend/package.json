@@ -16,6 +16,7 @@
     "@mui/icons-material": "^6.4.8",
     "@mui/material": "^6.4.8",
     "@popperjs/core": "2.11.8",
+    "decimal.js": "^10.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "6.30.1"

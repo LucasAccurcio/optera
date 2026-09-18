@@ -16,4 +16,5 @@ export const env = {
   databaseUrl: required('DATABASE_URL'),
   logLevel: process.env.LOG_LEVEL ?? 'info',
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
+  brapiToken: process.env.BRAPI_TOKEN || undefined,
 } as const;

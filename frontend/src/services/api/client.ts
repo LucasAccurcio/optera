@@ -2,6 +2,7 @@ import type {
   Operation,
   OperationFilters,
   OperationInput,
+  QuoteResponse,
 } from "../../types/operations";
 import type { Strategy, StrategyInput } from "../../types/strategies";
 import type { Summary } from "../../types/summary";
@@ -16,6 +17,7 @@ export type OperationListResponse = {
   data: Operation[];
   meta: { page: number; pageSize: number; total: number; totalPages: number };
 };
+export type { QuoteResponse } from "../../types/operations";
 
 const baseUrl = (
   import.meta.env.VITE_API_URL ?? "http://localhost:3001"
@@ -99,6 +101,12 @@ export async function getOperations(
   if (filters.side) params.set("side", filters.side);
   if (filters.strategyId) params.set("strategyId", filters.strategyId);
   return requestEnvelope<OperationListResponse>(`/operations?${params}`);
+}
+
+export function getAvailableOperationsForStrategy() {
+  return requestEnvelope<OperationListResponse>(
+    "/operations/available-for-strategy",
+  );
 }
 
 export function createOperation(input: OperationInput) {
@@ -185,6 +193,14 @@ export function removeStrategyOperation(
 
 export function getSummary() {
   return request<Summary>("/summary");
+}
+
+export function getQuotes(): Promise<QuoteResponse> {
+  return requestEnvelope<QuoteResponse>("/quotes");
+}
+
+export function refreshQuotes(): Promise<QuoteResponse> {
+  return requestEnvelope<QuoteResponse>("/quotes/refresh", { method: "POST" });
 }
 
 export async function importOperations(file: File, mode: "preview" | "commit") {

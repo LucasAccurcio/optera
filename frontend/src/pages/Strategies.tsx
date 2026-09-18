@@ -27,11 +27,11 @@ import {
   addStrategyOperation,
   createStrategy,
   deleteStrategy,
-  getOperations,
+  getAvailableOperationsForStrategy,
   getStrategies,
   removeStrategyOperation,
 } from "../services/api/client";
-import type { Operation, OperationFilters } from "../types/operations";
+import type { Operation } from "../types/operations";
 import type { Strategy, StrategyInput } from "../types/strategies";
 
 const initialInput: StrategyInput = {
@@ -40,13 +40,6 @@ const initialInput: StrategyInput = {
   type: "",
   openedAt: new Date().toISOString().slice(0, 10),
   notes: "",
-};
-const allFilters: OperationFilters = {
-  status: "ALL",
-  asset: "",
-  optionType: "",
-  side: "",
-  strategyId: "",
 };
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -132,7 +125,7 @@ export function Strategies() {
     try {
       const [strategyResponse, operationResponse] = await Promise.all([
         getStrategies(),
-        getOperations(allFilters),
+        getAvailableOperationsForStrategy(),
       ]);
       setStrategies(strategyResponse);
       setOperations(operationResponse.data);
@@ -180,6 +173,9 @@ export function Strategies() {
       setStrategies((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
+      setOperations((current) =>
+        current.filter((operation) => operation.id !== selectedOperation),
+      );
       setSelectedOperation("");
     } catch (reason) {
       setError(
@@ -195,6 +191,8 @@ export function Strategies() {
       setStrategies((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
+      const available = await getAvailableOperationsForStrategy();
+      setOperations(available.data);
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -422,11 +420,6 @@ export function Strategies() {
                     >
                       <MenuItem value="">Selecione uma operação</MenuItem>
                       {operations
-                        .filter(
-                          (operation) =>
-                            !operation.strategyId ||
-                            operation.strategyId === strategy.id,
-                        )
                         .map((operation) => (
                           <MenuItem key={operation.id} value={operation.id}>
                             {operation.optionTicker} ·{" "}

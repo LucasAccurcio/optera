@@ -25,4 +25,29 @@ export class OperationRepository {
       this.prisma.operation.count({ where }),
     ]);
   }
+
+  findAvailableForStrategy() {
+    const where: Prisma.OperationWhereInput = {
+      closedAt: null,
+      strategyId: null,
+    };
+    return Promise.all([
+      this.prisma.operation.findMany({
+        where,
+        take: 100,
+        orderBy: { expirationDate: "asc" },
+      }),
+      this.prisma.operation.count({ where }),
+    ]);
+  }
+
+  async findOpenAssets(): Promise<string[]> {
+    const operations = await this.prisma.operation.findMany({
+      where: { closedAt: null },
+      select: { asset: true },
+      distinct: ['asset'],
+      orderBy: { asset: 'asc' },
+    });
+    return operations.map(({ asset }) => asset);
+  }
 }
