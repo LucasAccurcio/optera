@@ -162,7 +162,9 @@ export function parseOperationsWorkbook(buffer: Buffer): ParsedImport {
   headerRow.forEach((value, index) =>
     headers.set(normalizeHeader(value), index),
   );
-  const missing = requiredHeaders.filter((header) => !headers.has(header));
+  const missing = requiredHeaders.filter(
+    (header) => !headers.has(normalizeHeader(header)),
+  );
   if (missing.length > 0)
     throw new AppError(
       "INVALID_FILE",

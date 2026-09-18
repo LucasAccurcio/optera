@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
@@ -9,6 +9,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -30,6 +31,7 @@ import {
   createOperation,
   deleteOperation,
   getOperations,
+  refreshQuotes,
   updateOperation,
   updateSimulation,
 } from "../services/api/client";
@@ -39,8 +41,11 @@ import type {
   OperationInput,
   OperationSide,
   OptionType,
+  QuoteResponse,
 } from "../types/operations";
 import { PriceSimulator } from "../components/PriceSimulator";
+import { normalizeAssetKey, presentQuoteIndicators } from "../shared/market/classification";
+import { claimInitialRefresh } from "../shared/market/initial-refresh";
 
 const emptyFilters: OperationFilters = {
   status: "OPEN",
@@ -218,6 +223,7 @@ function OperationForm({
 
 function OperationCard({
   operation,
+  quote,
   onEdit,
   onDelete,
   onSimulation,
@@ -225,6 +231,7 @@ function OperationCard({
   savingSimulation,
 }: {
   operation: Operation;
+  quote: QuoteResponse["data"][number] | undefined;
   onEdit: () => void;
   onDelete: () => void;
   onSimulation: (price: string) => Promise<void>;
@@ -232,6 +239,11 @@ function OperationCard({
   savingSimulation: boolean;
 }) {
   const positive = Number(operation.result) >= 0;
+  const indicators = presentQuoteIndicators(
+    operation.optionType,
+    operation.strike,
+    quote?.price ?? null,
+  );
   return (
     <Card
       sx={{
@@ -271,6 +283,27 @@ function OperationCard({
             label={operation.status === "OPEN" ? "Aberta" : "Encerrada"}
           />
         </Stack>
+        {operation.status === "OPEN" && (
+          <Stack
+            direction="row"
+            flexWrap="wrap"
+            gap={{ xs: 2, sm: 4 }}
+            sx={{ mt: 2.5 }}
+          >
+            <Box>
+              <Typography variant="caption" color="text.secondary">Cotação</Typography>
+              <Typography sx={{ fontWeight: 700 }}>{indicators.price === "-" ? "-" : formatCurrency(indicators.price)}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Distância</Typography>
+              <Typography sx={{ fontWeight: 700 }}>{indicators.absolute === "-" ? "-" : `${formatCurrency(indicators.absolute)} (${Number(indicators.percentage).toFixed(2)}%)`}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">Classificação</Typography>
+              <Typography sx={{ fontWeight: 700 }}>{indicators.classification}</Typography>
+            </Box>
+          </Stack>
+        )}
         <Stack
           direction="row"
           flexWrap="wrap"
@@ -376,6 +409,12 @@ export function Positions() {
   const [closePrice, setClosePrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [quotes, setQuotes] = useState<QuoteResponse | null>(null);
+  const [refreshingQuotes, setRefreshingQuotes] = useState(false);
+  const initialRefreshClaim = useRef(false);
+  const quoteByAsset = new Map(
+    (quotes?.data ?? []).map((quote) => [normalizeAssetKey(quote.asset), quote]),
+  );
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -395,6 +434,23 @@ export function Positions() {
   useEffect(() => {
     void load();
   }, [filters]);
+  const refreshMarketQuotes = async () => {
+    setRefreshingQuotes(true);
+    try {
+      setQuotes(await refreshQuotes());
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível atualizar as cotações.",
+      );
+    } finally {
+      setRefreshingQuotes(false);
+    }
+  };
+  useEffect(() => {
+    if (claimInitialRefresh(initialRefreshClaim)) void refreshMarketQuotes();
+  }, []);
   const openCreate = () => {
     setEditing(null);
     setForm({ ...emptyForm, openedAt: new Date().toISOString().slice(0, 10) });
@@ -505,6 +561,26 @@ export function Positions() {
           Nova operação
         </Button>
       </Stack>
+      <Card sx={{ mb: 3, backgroundImage: "none" }}>
+        <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+          <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={1.5} alignItems={{ sm: "center" }}>
+            <Box>
+              <Typography variant="subtitle2">Cotações de mercado</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {quotes?.updatedAt ? `Atualizadas em ${new Date(quotes.updatedAt).toLocaleString("pt-BR")}` : "Nenhuma cotação carregada"}
+              </Typography>
+            </Box>
+            <Button variant="outlined" onClick={() => void refreshMarketQuotes()} disabled={refreshingQuotes} startIcon={refreshingQuotes ? <CircularProgress size={16} /> : undefined}>
+              {refreshingQuotes ? "Atualizando..." : "Atualizar cotações"}
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+      {quotes && quotes.warnings.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Dados de mercado podem estar desatualizados. {quotes.warnings.map((warning) => warning.message).join(" ")}
+        </Alert>
+      )}
       <Stack
         direction={{ xs: "column", lg: "row" }}
         spacing={1.5}
@@ -598,6 +674,7 @@ export function Positions() {
             <OperationCard
               key={operation.id}
               operation={operation}
+              quote={quoteByAsset.get(normalizeAssetKey(operation.asset))}
               onEdit={() => openEdit(operation)}
               onDelete={() => void remove(operation)}
               onSimulation={(price) => saveSimulation(operation, price)}

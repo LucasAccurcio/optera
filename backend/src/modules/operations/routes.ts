@@ -29,6 +29,9 @@ export default fp(async (app: any) => {
   app.get("/operations", async (request: any) =>
     service.list(parse(operationListQuerySchema, request.query)),
   );
+  app.get("/operations/available-for-strategy", async () =>
+    service.listAvailableForStrategy(),
+  );
   app.get("/operations/:id", async (request: any) => ({
     data: await service.getById(parse(operationIdSchema, request.params).id),
   }));

@@ -47,3 +47,24 @@ export interface OperationFilters {
   side: "" | OperationSide;
   strategyId: string;
 }
+
+export interface QuoteView {
+  asset: string;
+  price: string | null;
+  timestamp: string | null;
+  source: string;
+  delayed: boolean;
+  lastError: string | null;
+}
+
+export interface QuoteWarning {
+  code: string;
+  message: string;
+  asset?: string;
+}
+
+export interface QuoteResponse {
+  data: QuoteView[];
+  updatedAt: string | null;
+  warnings: QuoteWarning[];
+}

@@ -246,4 +246,17 @@ export class OperationService {
       },
     };
   }
+
+  async listAvailableForStrategy() {
+    const [operations, total] = await this.repository.findAvailableForStrategy();
+    return {
+      data: operations.map(serializeOperation),
+      meta: {
+        page: 1,
+        pageSize: 100,
+        total,
+        totalPages: Math.ceil(total / 100),
+      },
+    };
+  }
 }

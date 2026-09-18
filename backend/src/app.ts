@@ -7,9 +7,11 @@ import operationRoutes from "./modules/operations/routes.js";
 import strategyRoutes from "./modules/strategies/routes.js";
 import summaryRoutes from "./modules/summary/routes.js";
 import importRoutes from "./modules/imports/routes.js";
+import quoteRoutes from "./modules/quotes/routes.js";
+import type { MarketDataProvider } from "./modules/quotes/types.js";
 
 export function buildApp(
-  options: { withDatabase?: boolean; prisma?: any } = {},
+  options: { withDatabase?: boolean; prisma?: any; quoteProvider?: MarketDataProvider } = {},
 ): FastifyInstance {
   const app = Fastify({
     logger: { level: env.logLevel },
@@ -26,6 +28,7 @@ export function buildApp(
   app.register(strategyRoutes);
   app.register(summaryRoutes);
   app.register(importRoutes);
+  app.register(quoteRoutes, { provider: options.quoteProvider });
 
   app.get("/health", async (_request: any, reply: any) => {
     let database = "not_configured";
