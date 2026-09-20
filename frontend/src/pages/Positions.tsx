@@ -45,6 +45,7 @@ import type {
 } from "../types/operations";
 import { PriceSimulator } from "../components/PriceSimulator";
 import { normalizeAssetKey, presentQuoteIndicators } from "../shared/market/classification";
+import { calculateDte } from "../shared/market/dte";
 import { claimInitialRefresh } from "../shared/market/initial-refresh";
 
 const emptyFilters: OperationFilters = {
@@ -244,6 +245,7 @@ function OperationCard({
     operation.strike,
     quote?.price ?? null,
   );
+  const dte = calculateDte(new Date(), operation.expirationDate);
   return (
     <Card
       sx={{
@@ -301,6 +303,10 @@ function OperationCard({
             <Box>
               <Typography variant="caption" color="text.secondary">Classificação</Typography>
               <Typography sx={{ fontWeight: 700 }}>{indicators.classification}</Typography>
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary">DTE (dias úteis)</Typography>
+              <Typography sx={{ fontWeight: 700 }}>{dte ?? "-"}</Typography>
             </Box>
           </Stack>
         )}
