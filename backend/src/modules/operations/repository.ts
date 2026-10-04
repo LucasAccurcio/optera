@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 
 export class OperationRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -8,7 +9,10 @@ export class OperationRepository {
   }
 
   findById(id: string) {
-    return this.prisma.operation.findUnique({ where: { id } });
+    return this.prisma.operation.findUnique({
+      where: { id },
+      include: { closures: { orderBy: [{ closedAt: 'asc' }, { createdAt: 'asc' }] } },
+    });
   }
 
   update(id: string, data: Prisma.OperationUpdateInput) {
@@ -21,38 +25,51 @@ export class OperationRepository {
 
   findMany(
     where: Prisma.OperationWhereInput,
-    skip: number,
-    take: number,
     orderBy: Prisma.OperationOrderByWithRelationInput
   ) {
-    return Promise.all([
-      this.prisma.operation.findMany({ where, skip, take, orderBy }),
-      this.prisma.operation.count({ where }),
-    ]);
+    return this.prisma.operation.findMany({
+      where,
+      include: { closures: { orderBy: [{ closedAt: 'asc' }, { createdAt: 'asc' }] } },
+      orderBy,
+    });
   }
 
-  findAvailableForStrategy() {
-    const where: Prisma.OperationWhereInput = {
-      closedAt: null,
-      strategyId: null,
-    };
-    return Promise.all([
-      this.prisma.operation.findMany({
-        where,
-        take: 100,
-        orderBy: { expirationDate: 'asc' },
-      }),
-      this.prisma.operation.count({ where }),
-    ]);
+  async findAvailableForStrategy(): Promise<[any[], number]> {
+    const operations = await this.prisma.operation.findMany({
+      where: { strategyId: null },
+      include: { closures: { select: { quantity: true } } },
+      orderBy: { expirationDate: 'asc' },
+    });
+    const available = operations.filter((operation) => {
+      const closedQuantity = operation.closures.reduce(
+        (total, closure) => total + closure.quantity,
+        0,
+      );
+      return closedQuantity < operation.quantity;
+    });
+    return [available.slice(0, 100), available.length];
   }
 
   async findOpenAssets(): Promise<string[]> {
     const operations = await this.prisma.operation.findMany({
-      where: { closedAt: null },
-      select: { asset: true },
-      distinct: ['asset'],
-      orderBy: { asset: 'asc' },
+      select: { asset: true, quantity: true, closures: { select: { quantity: true } } },
     });
-    return operations.map(({ asset }) => asset);
+    return [...new Set(
+      operations
+        .filter((operation) => {
+          const closedQuantity = operation.closures.reduce(
+            (total, closure) => total + closure.quantity,
+            0,
+          );
+          return closedQuantity < operation.quantity;
+        })
+        .map(({ asset }) => asset),
+    )].sort((a, b) => a.localeCompare(b));
+  }
+
+  transaction<T>(callback: (transaction: Prisma.TransactionClient) => Promise<T>) {
+    return this.prisma.$transaction(callback, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
   }
 }

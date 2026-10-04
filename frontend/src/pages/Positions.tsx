@@ -36,6 +36,7 @@ import {
   updateSimulation,
 } from "../services/api/client";
 import type {
+  OperationCloseInput,
   Operation,
   OperationFilters,
   OperationInput,
@@ -43,9 +44,10 @@ import type {
   OptionType,
   QuoteResponse,
 } from "../types/operations";
+import { OperationCloseDialog } from "../components/OperationCloseDialog";
 import { PriceSimulator } from "../components/PriceSimulator";
 import { normalizeAssetKey, presentQuoteIndicators } from "../shared/market/classification";
-import { calculateDte } from "../shared/market/dte";
+import { calculateDte, getDteStatus, getDteLabel } from "../shared/market/dte";
 import { claimInitialRefresh } from "../shared/market/initial-refresh";
 
 const emptyFilters: OperationFilters = {
@@ -240,6 +242,8 @@ function OperationCard({
   savingSimulation: boolean;
 }) {
   const positive = Number(operation.result) >= 0;
+  const hasOpenQuantity = operation.openQuantity > 0;
+  const hasClosureHistory = operation.closedQuantity > 0;
   const indicators = presentQuoteIndicators(
     operation.optionType,
     operation.strike,
@@ -276,16 +280,18 @@ function OperationCard({
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {operation.optionType} ·{" "}
               {operation.side === "BUY" ? "Compra" : "Venda"} ·{" "}
-              {operation.quantity} opções
+              {hasClosureHistory
+                ? `${operation.openQuantity} abertas de ${operation.quantity} (${operation.closedQuantity} encerradas)`
+                : `${operation.quantity} opções`}
             </Typography>
           </Box>
           <Chip
             size="small"
-            color={operation.status === "OPEN" ? "primary" : "default"}
-            label={operation.status === "OPEN" ? "Aberta" : "Encerrada"}
+            color={operation.status === "OPEN" ? "primary" : operation.status === "PARTIALLY_CLOSED" ? "warning" : "default"}
+            label={operation.status === "OPEN" ? "Aberta" : operation.status === "PARTIALLY_CLOSED" ? "Parcialmente encerrada" : "Encerrada"}
           />
         </Stack>
-        {operation.status === "OPEN" && (
+        {hasOpenQuantity && (
           <Stack
             direction="row"
             flexWrap="wrap"
@@ -306,7 +312,23 @@ function OperationCard({
             </Box>
             <Box>
               <Typography variant="caption" color="text.secondary">DTE (dias úteis)</Typography>
-              <Typography sx={{ fontWeight: 700 }}>{dte ?? "-"}</Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography sx={{ fontWeight: 700 }}>{getDteLabel(dte)}</Typography>
+                {hasOpenQuantity && dte !== null && (
+                  <Chip
+                    size="small"
+                    label={getDteStatus(dte)?.toUpperCase()}
+                    color={
+                      dte === 0 ? "error" :
+                      dte <= 3 ? "error" :
+                      dte <= 7 ? "warning" :
+                      dte <= 15 ? "warning" :
+                      "success"
+                    }
+                    variant="outlined"
+                  />
+                )}
+              </Stack>
             </Box>
           </Stack>
         )}
@@ -341,12 +363,24 @@ function OperationCard({
             </Typography>
           </Box>
         </Stack>
-        {operation.status === "OPEN" ? (
+        {hasOpenQuantity ? (
+          <>
+            {hasClosureHistory && (
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mt: 2 }}>
+                <Typography color="text.secondary">
+                  Realizado: <strong>{formatCurrency(operation.realizedResult)}</strong>
+                </Typography>
+                <Typography color="text.secondary">
+                  Estimado em aberto: <strong>{formatCurrency(operation.estimatedOpenResult)}</strong>
+                </Typography>
+              </Stack>
+            )}
           <PriceSimulator
             operation={operation}
             saving={savingSimulation}
             onSave={onSimulation}
           />
+          </>
         ) : (
           <Box
             sx={{
@@ -363,7 +397,7 @@ function OperationCard({
               variant="h6"
               color={positive ? "success.main" : "error.main"}
             >
-              {formatCurrency(operation.result)}{" "}
+              {formatCurrency(operation.realizedResult)}{" "}
               <Typography component="span" variant="body2">
                 ({(Number(operation.resultPercentage) * 100).toFixed(2)}%)
               </Typography>
@@ -375,7 +409,7 @@ function OperationCard({
           <Button
             size="small"
             onClick={onClose}
-            disabled={operation.status === "CLOSED"}
+            disabled={!hasOpenQuantity}
           >
             Encerrar
           </Button>
@@ -383,7 +417,7 @@ function OperationCard({
             size="small"
             startIcon={<EditOutlinedIcon />}
             onClick={onEdit}
-            disabled={operation.status === "CLOSED"}
+            disabled={hasClosureHistory}
           >
             Editar
           </Button>
@@ -392,6 +426,7 @@ function OperationCard({
             color="error"
             startIcon={<DeleteOutlineRoundedIcon />}
             onClick={onDelete}
+            disabled={hasClosureHistory}
           >
             Excluir
           </Button>
@@ -409,10 +444,6 @@ export function Positions() {
   const [form, setForm] = useState<OperationInput>(emptyForm);
   const [editing, setEditing] = useState<Operation | null>(null);
   const [closing, setClosing] = useState<Operation | null>(null);
-  const [closeDate, setCloseDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
-  const [closePrice, setClosePrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<QuoteResponse | null>(null);
@@ -517,14 +548,17 @@ export function Positions() {
   };
   const openClose = (operation: Operation) => {
     setClosing(operation);
-    setCloseDate(new Date().toISOString().slice(0, 10));
-    setClosePrice(operation.simulatedClosingPrice);
   };
-  const saveClose = async () => {
+  const saveClose = async (input: OperationCloseInput) => {
     if (!closing) return;
     setSaving(true);
     try {
-      const updated = await closeOperation(closing.id, closeDate, closePrice);
+      const updated = await closeOperation(
+        closing.id,
+        input.quantity,
+        input.closedAt,
+        input.actualClosingPrice,
+      );
       setOperations((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
@@ -600,6 +634,7 @@ export function Positions() {
         >
           <ToggleButton value="ALL">Todas</ToggleButton>
           <ToggleButton value="OPEN">Abertas</ToggleButton>
+          <ToggleButton value="PARTIALLY_CLOSED">Parciais</ToggleButton>
           <ToggleButton value="CLOSED">Encerradas</ToggleButton>
         </ToggleButtonGroup>
         <TextField
@@ -704,42 +739,13 @@ export function Positions() {
         />
       ) : null}
       {closing && (
-        <Dialog open onClose={() => setClosing(null)} fullWidth maxWidth="xs">
-          <DialogTitle>Encerrar operação</DialogTitle>
-          <DialogContent dividers>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Informe o preço efetivo usado no encerramento. A simulação não
-              será alterada.
-            </Typography>
-            <Stack spacing={2} sx={{ pt: 1 }}>
-              <TextField
-                label="Data de encerramento"
-                type="date"
-                value={closeDate}
-                onChange={(event) => setCloseDate(event.target.value)}
-                InputLabelProps={{ shrink: true }}
-                required
-              />
-              <TextField
-                label="Preço efetivo de encerramento"
-                value={closePrice}
-                onChange={(event) => setClosePrice(event.target.value)}
-                inputProps={{ inputMode: "decimal" }}
-                required
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setClosing(null)}>Cancelar</Button>
-            <Button
-              variant="contained"
-              onClick={() => void saveClose()}
-              disabled={saving || !closeDate || !closePrice}
-            >
-              {saving ? "Encerrando..." : "Confirmar encerramento"}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <OperationCloseDialog
+          operation={closing}
+          onClose={() => setClosing(null)}
+          onSubmit={saveClose}
+          saving={saving}
+          error={error}
+        />
       )}
     </Box>
   );

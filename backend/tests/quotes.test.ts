@@ -1,8 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import type { AssetQuote } from '../src/modules/quotes/types.js';
 import type { QuoteRecord } from '../src/modules/quotes/repository.js';
 import { QuoteService } from '../src/modules/quotes/service.js';
+import type { AssetQuote } from '../src/modules/quotes/types.js';
 
 process.env.DATABASE_URL ??= 'postgresql://optera:optera@localhost:5432/optera_app';
 
@@ -44,8 +44,12 @@ describe('market quote configuration and cache', () => {
   });
 
   it('refreshes one quote batch for distinct open assets and persists successes', async () => {
-    const provider = { getQuotes: vi.fn(async (assets: string[]) => assets.map((asset) => quote(asset))) };
-    const operations = { findOpenAssets: vi.fn(async () => ['petr4', ' PETR4 ', 'vale3', 'CLOSED']) };
+    const provider = {
+      getQuotes: vi.fn(async (assets: string[]) => assets.map((asset) => quote(asset))),
+    };
+    const operations = {
+      findOpenAssets: vi.fn(async () => ['petr4', ' PETR4 ', 'vale3', 'CLOSED']),
+    };
     const repository = quoteRepository();
     const service = new QuoteService({ provider, operations, repository, tokenAvailable: true });
 
@@ -68,10 +72,18 @@ describe('market quote configuration and cache', () => {
 
     const result = await service.refresh();
 
-    expect(repository.recordFailure).toHaveBeenCalledWith('VALE3', expect.stringContaining('No quote returned'));
+    expect(repository.recordFailure).toHaveBeenCalledWith(
+      'VALE3',
+      expect.stringContaining('No quote returned')
+    );
     expect(result.data).toEqual([
       expect.objectContaining({ asset: 'PETR4', price: '42.1' }),
-      expect.objectContaining({ asset: 'VALE3', price: '40', timestamp: '2026-09-18T10:00:00.000Z', lastError: 'No quote returned for asset' }),
+      expect.objectContaining({
+        asset: 'VALE3',
+        price: '40',
+        timestamp: '2026-09-18T10:00:00.000Z',
+        lastError: 'No quote returned for asset',
+      }),
     ]);
     expect(result.warnings).toEqual([expect.objectContaining({ asset: 'VALE3' })]);
   });
@@ -110,7 +122,14 @@ describe('market quote configuration and cache', () => {
 
   it('rejects a concurrent refresh with the stable application error code', async () => {
     let release!: () => void;
-    const provider = { getQuotes: vi.fn(() => new Promise<AssetQuote[]>((resolve) => { release = () => resolve([]); })) };
+    const provider = {
+      getQuotes: vi.fn(
+        () =>
+          new Promise<AssetQuote[]>((resolve) => {
+            release = () => resolve([]);
+          })
+      ),
+    };
     const operations = { findOpenAssets: vi.fn(async () => ['PETR4']) };
     const repository = quoteRepository();
     const service = new QuoteService({ provider, operations, repository, tokenAvailable: true });
@@ -149,7 +168,12 @@ const cachedQuote = (asset: string, price: string, timestamp: string): QuoteReco
 const quoteRepository = (initial: QuoteRecord[] = []) => {
   let rows = [...initial];
   return {
-    findByAssets: vi.fn(async (assets: string[]) => assets.map((asset) => rows.find((row) => row.asset === asset)).filter(Boolean) as QuoteRecord[]),
+    findByAssets: vi.fn(
+      async (assets: string[]) =>
+        assets
+          .map((asset) => rows.find((row) => row.asset === asset))
+          .filter(Boolean) as QuoteRecord[]
+    ),
     findAll: vi.fn(async () => rows),
     upsertSuccess: vi.fn(async (input: AssetQuote) => {
       const row = cachedQuote(input.asset, input.price, input.timestamp);

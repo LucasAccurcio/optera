@@ -28,8 +28,13 @@ function makeDatabase(initialQuotes = [cachedQuote('PETR4', '40.00', '2026-09-18
   const quotes = [...initialQuotes];
   return {
     operation: {
-      findMany: vi.fn(async ({ where }: any) =>
-        where?.closedAt === null ? [{ asset: 'PETR4' }, { asset: 'VALE3' }] : [],
+      findMany: vi.fn(async ({ select }: any) =>
+        select?.closures
+          ? [
+              { asset: 'PETR4', quantity: 100, closures: [] },
+              { asset: 'VALE3', quantity: 100, closures: [] },
+            ]
+          : [],
       ),
       count: vi.fn(async () => 0),
     },

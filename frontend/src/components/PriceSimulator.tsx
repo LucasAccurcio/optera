@@ -32,12 +32,13 @@ export function PriceSimulator({
   const maximum = Math.max(Number(operation.entryPremium) * 2, 0.01);
   const numericPrice = Number(price);
   const premium = Number(operation.entryPremium);
+  const openQuantity = operation.openQuantity;
   const result =
     operation.side === "SELL"
-      ? (premium - numericPrice) * operation.quantity
-      : (numericPrice - premium) * operation.quantity;
+      ? (premium - numericPrice) * openQuantity
+      : (numericPrice - premium) * openQuantity;
   const percentage =
-    premium === 0 ? 0 : result / (premium * operation.quantity);
+    premium === 0 || openQuantity === 0 ? 0 : result / (premium * openQuantity);
 
   useEffect(
     () => setPrice(operation.simulatedClosingPrice),

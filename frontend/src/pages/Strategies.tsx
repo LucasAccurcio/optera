@@ -25,14 +25,24 @@ import {
 } from "@mui/material";
 import {
   addStrategyOperation,
+  closeStrategy,
   createStrategy,
   deleteStrategy,
   getAvailableOperationsForStrategy,
   getStrategies,
+  getStrategyAlerts,
+  getStrategySimulation,
   removeStrategyOperation,
+  setStrategyAssetPrice,
 } from "../services/api/client";
 import type { Operation } from "../types/operations";
-import type { Strategy, StrategyInput } from "../types/strategies";
+import type {
+  Strategy,
+  StrategyAlerts,
+  StrategyCloseLegInput,
+  StrategyInput,
+  StrategySimulation,
+} from "../types/strategies";
 
 const initialInput: StrategyInput = {
   name: "",
@@ -119,6 +129,11 @@ export function Strategies() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [alertsByStrategy, setAlertsByStrategy] = useState<Record<string, StrategyAlerts | null>>({});
+  const [scenarioPrices, setScenarioPrices] = useState<Record<string, string>>({});
+  const [simulations, setSimulations] = useState<Record<string, StrategySimulation | null>>({});
+  const [closingStrategy, setClosingStrategy] = useState<Strategy | null>(null);
+  const [closeValues, setCloseValues] = useState<Record<string, { closedAt: string; actualClosingPrice: string }>>({});
 
   const load = async () => {
     setLoading(true);
@@ -129,6 +144,14 @@ export function Strategies() {
       ]);
       setStrategies(strategyResponse);
       setOperations(operationResponse.data);
+      const alertEntries = await Promise.all(strategyResponse.map(async (strategy) => {
+        try {
+          return [strategy.id, await getStrategyAlerts(strategy.id)] as const;
+        } catch {
+          return [strategy.id, null] as const;
+        }
+      }));
+      setAlertsByStrategy(Object.fromEntries(alertEntries));
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -220,6 +243,62 @@ export function Strategies() {
     }
   };
 
+  const simulateExpiration = async (strategyId: string) => {
+    const price = scenarioPrices[strategyId] ?? "";
+    if (!price) return;
+    try {
+      await setStrategyAssetPrice(strategyId, price);
+      const simulation = await getStrategySimulation(strategyId);
+      setSimulations((current) => ({ ...current, [strategyId]: simulation }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível simular o vencimento.");
+    }
+  };
+
+  const openStrategyClose = (strategy: Strategy) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setClosingStrategy(strategy);
+    setCloseValues(Object.fromEntries(
+      strategy.operations
+        .filter((leg) => leg.openQuantity > 0)
+        .map((leg) => [leg.id, {
+          closedAt: today,
+          actualClosingPrice: leg.simulatedClosingPrice,
+        }]),
+    ));
+  };
+
+  const saveStrategyClose = async () => {
+    if (!closingStrategy) return;
+    setSaving(true);
+    try {
+      const legs: StrategyCloseLegInput[] = closingStrategy.operations
+        .filter((leg) => leg.openQuantity > 0)
+        .map((leg) => ({
+          operationId: leg.id,
+          quantity: leg.openQuantity,
+          actualClosingPrice: closeValues[leg.id]?.actualClosingPrice ?? "",
+          closedAt: closeValues[leg.id]?.closedAt ?? "",
+        }));
+      await closeStrategy(closingStrategy.id, legs);
+      setClosingStrategy(null);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível encerrar a estratégia.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateCloseValue = (
+    operationId: string,
+    field: "closedAt" | "actualClosingPrice",
+    value: string,
+  ) => setCloseValues((current) => ({
+    ...current,
+    [operationId]: { ...current[operationId], [field]: value },
+  }));
+
   return (
     <Box>
       <Stack
@@ -293,10 +372,18 @@ export function Strategies() {
                       <Chip
                         size="small"
                         label={
-                          strategy.status === "OPEN" ? "Aberta" : "Encerrada"
+                          strategy.status === "OPEN"
+                            ? "Aberta"
+                            : strategy.status === "PARTIALLY_CLOSED"
+                              ? "Parcialmente encerrada"
+                              : "Encerrada"
                         }
                         color={
-                          strategy.status === "OPEN" ? "primary" : "default"
+                          strategy.status === "OPEN"
+                            ? "primary"
+                            : strategy.status === "PARTIALLY_CLOSED"
+                              ? "warning"
+                              : "default"
                         }
                       />
                     </Stack>
@@ -306,14 +393,25 @@ export function Strategies() {
                       {strategy.openedAt}
                     </Typography>
                   </Box>
-                  <Button
-                    color="error"
-                    size="small"
-                    startIcon={<DeleteOutlineRoundedIcon />}
-                    onClick={() => void remove(strategy)}
-                  >
-                    Excluir
-                  </Button>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => openStrategyClose(strategy)}
+                      disabled={!strategy.operations.some((leg) => leg.openQuantity > 0)}
+                    >
+                      Encerrar estratégia
+                    </Button>
+                    <Button
+                      color="error"
+                      size="small"
+                      startIcon={<DeleteOutlineRoundedIcon />}
+                      onClick={() => void remove(strategy)}
+                      disabled={strategy.operations.some((leg) => leg.closedQuantity > 0)}
+                    >
+                      Excluir
+                    </Button>
+                  </Stack>
                 </Stack>
                 <Stack
                   direction="row"
@@ -323,7 +421,7 @@ export function Strategies() {
                 >
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Prêmio total
+                      Prêmio inicial total
                     </Typography>
                     <Typography sx={{ fontWeight: 700 }}>
                       {formatMoney(strategy.totalPremium)}
@@ -331,28 +429,109 @@ export function Strategies() {
                   </Box>
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Resultado consolidado
+                      Resultado realizado
+                    </Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {formatMoney(strategy.realizedResult)}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Estimado em aberto
+                    </Typography>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {formatMoney(strategy.estimatedOpenResult)}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Projetado total
                     </Typography>
                     <Typography
                       sx={{ fontWeight: 700 }}
-                      color={
-                        Number(strategy.result) >= 0
-                          ? "success.main"
-                          : "error.main"
-                      }
+                      color={Number(strategy.result) >= 0 ? "success.main" : "error.main"}
                     >
                       {formatMoney(strategy.result)}
                     </Typography>
                   </Box>
                   <Box>
                     <Typography variant="caption" color="text.secondary">
-                      Percentual
+                      Percentual projetado
                     </Typography>
                     <Typography sx={{ fontWeight: 700 }}>
                       {(Number(strategy.resultPercentage) * 100).toFixed(2)}%
                     </Typography>
                   </Box>
+                  {strategy.maxProfitCapturedPercentage !== null && (
+                    <Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Lucro máximo capturado
+                      </Typography>
+                      <Typography sx={{ fontWeight: 700 }}>
+                        {Number(strategy.maxProfitCapturedPercentage).toFixed(2)}%
+                      </Typography>
+                    </Box>
+                  )}
                 </Stack>
+                {strategy.spreadAnalysis?.status === "supported" && (
+                  <Box sx={{ mt: 2, p: 2, borderRadius: 2, bgcolor: "rgba(255,255,255,.035)" }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                      {strategy.spreadAnalysis.strategyType === "BEAR_PUT"
+                        ? "Trava de baixa com PUT"
+                        : "Trava de alta com CALL"} · limites do saldo aberto
+                    </Typography>
+                    <Stack direction="row" flexWrap="wrap" gap={{ xs: 2, sm: 4 }}>
+                      <Typography variant="body2">Lucro máximo: {formatMoney(strategy.spreadAnalysis.maxProfit)}</Typography>
+                      <Typography variant="body2">Perda máxima: {formatMoney(strategy.spreadAnalysis.maxLoss)}</Typography>
+                      <Typography variant="body2">Breakeven: {formatMoney(strategy.spreadAnalysis.breakeven)}</Typography>
+                      <Typography variant="body2">Largura: {formatMoney(strategy.spreadAnalysis.width)}</Typography>
+                      <Typography variant="body2">Débito líquido: {formatMoney(strategy.spreadAnalysis.netDebitTotal)}</Typography>
+                      <Typography variant="body2">Retorno/risco: {Number(strategy.spreadAnalysis.returnRiskRatio).toFixed(2)}x</Typography>
+                    </Stack>
+                  </Box>
+                )}
+                {alertsByStrategy[strategy.id]?.alerts.map((alert, index) => (
+                  <Alert
+                    key={`${alert.type}-${alert.operationId ?? "strategy"}-${index}`}
+                    severity={alert.severity === "critical" ? "error" : alert.severity}
+                    sx={{ mt: 1.5 }}
+                  >
+                    {alert.message}
+                  </Alert>
+                ))}
+                {strategy.spreadAnalysis?.status === "supported" && (
+                  <Box sx={{ mt: 2, p: 2, borderRadius: 2, bgcolor: "rgba(255,255,255,.035)" }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                      Cenário manual no vencimento
+                    </Typography>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                      <TextField
+                        size="small"
+                        label="Preço manual do ativo"
+                        value={scenarioPrices[strategy.id] ?? ""}
+                        onChange={(event) => setScenarioPrices((current) => ({
+                          ...current,
+                          [strategy.id]: event.target.value,
+                        }))}
+                        inputProps={{ inputMode: "decimal" }}
+                      />
+                      <Button
+                        variant="outlined"
+                        disabled={!scenarioPrices[strategy.id]?.trim()}
+                        onClick={() => void simulateExpiration(strategy.id)}
+                      >
+                        Calcular cenário
+                      </Button>
+                    </Stack>
+                    {simulations[strategy.id]?.result !== null &&
+                      simulations[strategy.id]?.result !== undefined && (
+                        <Alert severity="info" sx={{ mt: 1.5 }}>
+                          {simulations[strategy.id]?.strategyType} · {simulations[strategy.id]?.scenario} ·{" "}
+                          Resultado: {formatMoney(simulations[strategy.id]!.result!)}
+                        </Alert>
+                      )}
+                  </Box>
+                )}
                 <Divider sx={{ my: 2 }} />
                 {strategy.operations.length === 0 ? (
                   <Typography color="text.secondary">
@@ -361,48 +540,68 @@ export function Strategies() {
                 ) : (
                   <Stack spacing={1}>
                     {strategy.operations.map((leg) => (
-                      <Stack
-                        key={leg.id}
-                        direction="row"
-                        alignItems="center"
-                        justifyContent="space-between"
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 1.5,
-                          bgcolor: "rgba(255,255,255,.035)",
-                        }}
-                      >
-                        <Box>
-                          <Typography sx={{ fontWeight: 700 }}>
-                            {leg.optionTicker}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {leg.optionType} ·{" "}
-                            {leg.side === "BUY" ? "Compra" : "Venda"} ·{" "}
-                            {leg.quantity} opções ·{" "}
-                            {leg.status === "OPEN" ? "simulado" : "realizado"}
-                          </Typography>
-                        </Box>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography
-                            color={
-                              Number(leg.result) >= 0
-                                ? "success.main"
-                                : "error.main"
-                            }
-                          >
-                            {formatMoney(leg.result)}
-                          </Typography>
-                          <Button
-                            aria-label={`Remover ${leg.optionTicker}`}
-                            size="small"
-                            color="inherit"
-                            onClick={() => void removeLeg(strategy, leg.id)}
-                          >
-                            <RemoveCircleOutlineRoundedIcon fontSize="small" />
-                          </Button>
+                      <Box key={leg.id}>
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          alignItems={{ sm: "center" }}
+                          justifyContent="space-between"
+                          gap={1}
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 1.5,
+                            bgcolor: "rgba(255,255,255,.035)",
+                          }}
+                        >
+                          <Box>
+                            <Typography sx={{ fontWeight: 700 }}>
+                              {leg.optionTicker}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {leg.optionType} · {leg.side === "BUY" ? "Compra" : "Venda"} ·{" "}
+                              {leg.openQuantity} abertas / {leg.closedQuantity} encerradas de {leg.quantity}
+                            </Typography>
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={{ sm: 2 }} sx={{ mt: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Realizado: {formatMoney(leg.realizedResult)}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Estimado aberto: {formatMoney(leg.estimatedOpenResult)}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Protegidas: {leg.protectedQuantity} · Residuais: {leg.unprotectedQuantity}
+                              </Typography>
+                            </Stack>
+                          </Box>
+                          <Stack direction="row" alignItems="center" spacing={1}>
+                            <Typography
+                              color={Number(leg.result) >= 0 ? "success.main" : "error.main"}
+                            >
+                              {formatMoney(leg.result)}
+                            </Typography>
+                            <Button
+                              aria-label={`Remover ${leg.optionTicker}`}
+                              size="small"
+                              color="inherit"
+                              onClick={() => void removeLeg(strategy, leg.id)}
+                              disabled={leg.closedQuantity > 0}
+                            >
+                              <RemoveCircleOutlineRoundedIcon fontSize="small" />
+                            </Button>
+                          </Stack>
                         </Stack>
-                      </Stack>
+                        {leg.closures.length > 0 && (
+                          <Stack spacing={0.25} sx={{ pl: 2, pt: 0.75 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Histórico de encerramentos
+                            </Typography>
+                            {leg.closures.map((closure) => (
+                              <Typography key={closure.id} variant="caption" color="text.secondary">
+                                {closure.closedAt} · {closure.quantity} opções · {formatMoney(closure.actualClosingPrice)}
+                              </Typography>
+                            ))}
+                          </Stack>
+                        )}
+                      </Box>
                     ))}
                   </Stack>
                 )}
@@ -436,6 +635,61 @@ export function Strategies() {
                     Adicionar perna
                   </Button>
                 </Stack>
+                {closingStrategy?.id === strategy.id && (
+                  <Dialog
+                    open
+                    onClose={() => setClosingStrategy(null)}
+                    fullWidth
+                    maxWidth="sm"
+                  >
+                    <DialogTitle>Encerrar estratégia</DialogTitle>
+                    <DialogContent dividers>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Informe o preço efetivo e a data de encerramento de cada quantidade aberta. Nenhuma ordem será enviada.
+                      </Typography>
+                      <Stack spacing={2} sx={{ pt: 1 }}>
+                        {strategy.operations
+                          .filter((leg) => leg.openQuantity > 0)
+                          .map((leg) => (
+                            <Box key={leg.id}>
+                              <Typography sx={{ fontWeight: 700 }}>
+                                {leg.optionTicker} · {leg.openQuantity} opções abertas
+                              </Typography>
+                              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 1 }}>
+                                <TextField
+                                  label="Data de encerramento"
+                                  type="date"
+                                  value={closeValues[leg.id]?.closedAt ?? ""}
+                                  onChange={(event) => updateCloseValue(leg.id, "closedAt", event.target.value)}
+                                  InputLabelProps={{ shrink: true }}
+                                  required
+                                />
+                                <TextField
+                                  label="Preço efetivo de encerramento"
+                                  value={closeValues[leg.id]?.actualClosingPrice ?? ""}
+                                  onChange={(event) => updateCloseValue(leg.id, "actualClosingPrice", event.target.value)}
+                                  inputProps={{ inputMode: "decimal" }}
+                                  required
+                                />
+                              </Stack>
+                            </Box>
+                          ))}
+                      </Stack>
+                    </DialogContent>
+                    <DialogActions>
+                      <Button onClick={() => setClosingStrategy(null)}>Cancelar</Button>
+                      <Button
+                        variant="contained"
+                        onClick={() => void saveStrategyClose()}
+                        disabled={saving || strategy.operations
+                          .filter((leg) => leg.openQuantity > 0)
+                          .some((leg) => !closeValues[leg.id]?.closedAt || !closeValues[leg.id]?.actualClosingPrice.trim())}
+                      >
+                        {saving ? "Encerrando..." : "Confirmar encerramento"}
+                      </Button>
+                    </DialogActions>
+                  </Dialog>
+                )}
               </CardContent>
             </Card>
           ))}

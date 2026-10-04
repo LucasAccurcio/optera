@@ -4,9 +4,14 @@ import type {
   OperationInput,
   QuoteResponse,
 } from "../../types/operations";
-import type { Strategy, StrategyInput } from "../../types/strategies";
+import type {
+  Strategy,
+  StrategyAlerts,
+  StrategyCloseLegInput,
+  StrategyInput,
+  StrategySimulation,
+} from "../../types/strategies";
 import type { Summary } from "../../types/summary";
-import type { ImportReport } from "../../types/imports";
 
 export type HealthResponse = {
   status: string;
@@ -143,12 +148,14 @@ export function updateSimulation(id: string, simulatedClosingPrice: string) {
 
 export function closeOperation(
   id: string,
+  quantity: number,
   closedAt: string,
   actualClosingPrice: string,
 ) {
   return request<Operation>(`/operations/${id}/close`, {
     method: "POST",
     body: JSON.stringify({
+      quantity,
       closedAt,
       actualClosingPrice: normalizeDecimalInput(actualClosingPrice),
     }),
@@ -191,6 +198,36 @@ export function removeStrategyOperation(
   );
 }
 
+export function closeStrategy(strategyId: string, legs: StrategyCloseLegInput[]) {
+  return request<Strategy>(`/strategies/${strategyId}/close`, {
+    method: "POST",
+    body: JSON.stringify({
+      legs: legs.map((leg) => ({
+        ...leg,
+        actualClosingPrice: normalizeDecimalInput(leg.actualClosingPrice),
+      })),
+    }),
+  });
+}
+
+export function getStrategyAlerts(strategyId: string) {
+  return request<StrategyAlerts>(`/strategies/${strategyId}/alerts`);
+}
+
+export function setStrategyAssetPrice(strategyId: string, price: string) {
+  return request<{ strategyId: string; asset: string; assetPrice: string }>(
+    `/strategies/${strategyId}/asset-price`,
+    {
+      method: "POST",
+      body: JSON.stringify({ price: normalizeDecimalInput(price) }),
+    },
+  );
+}
+
+export function getStrategySimulation(strategyId: string) {
+  return request<StrategySimulation>(`/strategies/${strategyId}/simulation`);
+}
+
 export function getSummary() {
   return request<Summary>("/summary");
 }
@@ -201,17 +238,4 @@ export function getQuotes(): Promise<QuoteResponse> {
 
 export function refreshQuotes(): Promise<QuoteResponse> {
   return requestEnvelope<QuoteResponse>("/quotes/refresh", { method: "POST" });
-}
-
-export async function importOperations(file: File, mode: "preview" | "commit") {
-  const formData = new FormData();
-  formData.append("file", file);
-  const response = await fetch(`${baseUrl}/imports/operations?mode=${mode}`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-    body: formData,
-  });
-  const body = (await response.json().catch(() => null)) as { data?: ImportReport; error?: { message?: string } } | null;
-  if (!response.ok) throw new Error(body?.error?.message ?? `API indisponível (${response.status})`);
-  return body?.data as ImportReport;
 }

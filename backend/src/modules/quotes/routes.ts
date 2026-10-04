@@ -1,8 +1,9 @@
 import fp from 'fastify-plugin';
 import { env } from '../../config/env.js';
+import { OperationRepository } from '../operations/repository.js';
+import { BrapiMarketDataProvider } from './provider.js';
 import { QuoteRepository } from './repository.js';
 import { QuoteService } from './service.js';
-import { BrapiMarketDataProvider } from './provider.js';
 import type { MarketDataProvider } from './types.js';
 
 export type QuoteRoutesOptions = {
@@ -13,14 +14,7 @@ export default fp(async (app: any, options: QuoteRoutesOptions) => {
   const service = new QuoteService({
     provider: options.provider ?? new BrapiMarketDataProvider({ token: env.brapiToken }),
     repository: new QuoteRepository(app.prisma),
-    operations: {
-      findOpenAssets: () => app.prisma.operation.findMany({
-        where: { closedAt: null },
-        select: { asset: true },
-        distinct: ['asset'],
-        orderBy: { asset: 'asc' },
-      }).then((operations: Array<{ asset: string }>) => operations.map(({ asset }) => asset)),
-    },
+    operations: new OperationRepository(app.prisma),
     tokenAvailable: Boolean(env.brapiToken),
   });
 

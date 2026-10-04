@@ -1,12 +1,17 @@
-FROM node:22-alpine
+FROM node:22-slim
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-RUN apk add --no-cache openssl
+
 COPY package*.json ./
-RUN npm install
-COPY prisma ./prisma
+RUN npm ci --only=production
+
+COPY prisma ./prisma/
 RUN npx prisma generate
-COPY tsconfig.json eslint.config.js ./
-COPY src ./src
-RUN npm run build
+
+COPY dist ./dist/
+
 EXPOSE 3001
-CMD ["sh", "-c", "npm run prisma:deploy && npm start"]
+
+CMD ["node", "dist/server.js"]

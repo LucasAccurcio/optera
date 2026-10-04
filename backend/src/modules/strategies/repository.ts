@@ -1,7 +1,18 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
 const operationInclude = {
-  operations: { orderBy: { createdAt: "asc" as const } },
+  operations: {
+    orderBy: { createdAt: "asc" as const },
+    include: {
+      closures: {
+        orderBy: [
+          { closedAt: "asc" as const },
+          { createdAt: "asc" as const },
+        ],
+      },
+    },
+  },
 };
 
 export class StrategyRepository {
@@ -38,7 +49,10 @@ export class StrategyRepository {
   }
 
   findOperation(id: string) {
-    return this.prisma.operation.findUnique({ where: { id } });
+    return this.prisma.operation.findUnique({
+      where: { id },
+      include: { closures: { orderBy: [{ closedAt: "asc" }, { createdAt: "asc" }] } },
+    });
   }
 
   associateOperation(operationId: string, strategyId: string) {
@@ -52,6 +66,12 @@ export class StrategyRepository {
     return this.prisma.operation.update({
       where: { id: operationId },
       data: { strategy: { disconnect: true } },
+    });
+  }
+
+  transaction<T>(callback: (transaction: Prisma.TransactionClient) => Promise<T>) {
+    return this.prisma.$transaction(callback, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     });
   }
 }

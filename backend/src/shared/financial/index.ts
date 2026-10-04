@@ -129,3 +129,13 @@ export function calculateStrategyResult({ operations, mode = 'simulated' }: Stra
 }
 
 export { SIXTY_PERCENT };
+
+export {
+  analyzeVerticalSpread,
+  calculateVerticalSpreadExpirationResult,
+} from './vertical-spread.js';
+export type {
+  SupportedVerticalSpreadAnalysis,
+  VerticalSpreadAnalysis,
+  VerticalSpreadLegInput,
+} from './vertical-spread.js';

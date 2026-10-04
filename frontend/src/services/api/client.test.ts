@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  closeOperation,
+  closeStrategy,
   createOperation,
   deleteStrategy,
   getHealth,
   getQuotes,
+  getStrategyAlerts,
+  getStrategySimulation,
   normalizeDecimalInput,
   refreshQuotes,
+  setStrategyAssetPrice,
 } from './client';
 
 describe('health client', () => {
@@ -93,5 +98,72 @@ describe('health client', () => {
       method: 'POST',
       headers: { Accept: 'application/json' },
     });
+  });
+
+  it('posts operation close quantity, date, and normalized effective price', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await closeOperation('6f6d8d13-5e23-4f64-8e38-08ea34a1f2d1', 25, '2026-02-01', '0,50');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3001/operations/6f6d8d13-5e23-4f64-8e38-08ea34a1f2d1/close',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          quantity: 25,
+          closedAt: '2026-02-01',
+          actualClosingPrice: '0.50',
+        }),
+      }),
+    );
+  });
+
+  it('posts an atomic strategy close with normalized per-leg prices', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const strategyId = '4f6d8d13-5e23-4f64-8e38-08ea34a1f2d1';
+    const legs = [{
+      operationId: '6f6d8d13-5e23-4f64-8e38-08ea34a1f2d1',
+      quantity: 100,
+      actualClosingPrice: '0,50',
+      closedAt: '2026-02-01',
+    }];
+
+    await closeStrategy(strategyId, legs);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://localhost:3001/strategies/${strategyId}/close`,
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          legs: [{ ...legs[0], actualClosingPrice: '0.50' }],
+        }),
+      }),
+    );
+  });
+
+  it('uses strategy alerts, manual asset price, and simulation endpoints', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {} }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const strategyId = '4f6d8d13-5e23-4f64-8e38-08ea34a1f2d1';
+
+    await getStrategyAlerts(strategyId);
+    await setStrategyAssetPrice(strategyId, '40,50');
+    await getStrategySimulation(strategyId);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`http://localhost:3001/strategies/${strategyId}/alerts`);
+    expect(fetchMock.mock.calls[1][0]).toBe(`http://localhost:3001/strategies/${strategyId}/asset-price`);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ price: '40.50' });
+    expect(fetchMock.mock.calls[2][0]).toBe(`http://localhost:3001/strategies/${strategyId}/simulation`);
   });
 });

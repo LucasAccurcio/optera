@@ -33,10 +33,12 @@ export class BrapiMarketDataProvider implements MarketDataProvider {
     const normalizedAssets = assets.map((asset) => asset.trim().toUpperCase()).filter(Boolean);
     if (normalizedAssets.length === 0) return [];
 
-    const url = `https://brapi.dev/api/quote/${normalizedAssets.join(',')}?token=${encodeURIComponent(this.token)}`;
+    const url = `${process.env.BRAPI_QUOTE_URL}/${normalizedAssets.join(',')}`;
     let response: Response;
     try {
-      response = await this.fetch(url);
+      response = await this.fetch(url,{
+				headers: { 'Authorization': `Bearer ${this.token}` },
+			});
     } catch (error) {
       throw new ProviderError('Brapi request failed', { cause: error });
     }

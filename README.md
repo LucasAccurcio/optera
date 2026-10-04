@@ -47,13 +47,6 @@ Resultados financeiros e preços são retornados como strings para preservar pre
 
 O consolidado usa o preço efetivo nas pernas encerradas e o preço simulado nas pernas abertas.
 
-### Importação
-
-- `POST /imports/operations?mode=preview`: valida o arquivo `.xlsx` e retorna a prévia sem gravar.
-- `POST /imports/operations?mode=commit`: grava as linhas válidas da prévia, ignorando duplicidades.
-
-O fluxo rejeita campos obrigatórios inválidos com número da linha e motivo, ignora linhas vazias e cria operações sem estratégia associada.
-
 ### Resumo
 
 - `GET /summary`: retorna operações abertas e encerradas, resultados realizado e simulado, operações lucrativas e com prejuízo, além de prêmios recebidos e pagos.

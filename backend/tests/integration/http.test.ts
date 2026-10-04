@@ -17,8 +17,7 @@ function makeOperation(overrides: Record<string, any> = {}) {
     openedAt: now,
     entryPremium: new Decimal("1"),
     simulatedClosingPrice: new Decimal("0.4"),
-    closedAt: null,
-    actualClosingPrice: null,
+    closures: [],
     strategyId: null,
     notes: null,
     createdAt: now,
@@ -35,10 +34,6 @@ function makeDatabase() {
     strike: new Decimal(value.strike),
     entryPremium: new Decimal(value.entryPremium),
     simulatedClosingPrice: new Decimal(value.simulatedClosingPrice),
-    actualClosingPrice:
-      value.actualClosingPrice == null
-        ? null
-        : new Decimal(value.actualClosingPrice),
   });
   const withStrategyOperations = (strategy: any) => ({
     ...strategy,
@@ -51,9 +46,6 @@ function makeDatabase() {
   const findStrategy = (id: string) =>
     strategies.find((strategy) => strategy.id === id) ?? null;
   const matches = (operation: any, where: any = {}) => {
-    if (where.closedAt === null && operation.closedAt !== null) return false;
-    if (where.closedAt?.not === null && operation.closedAt === null)
-      return false;
     if (
       where.asset &&
       !operation.asset
@@ -68,55 +60,82 @@ function makeDatabase() {
     if (where.side && operation.side !== where.side) return false;
     return true;
   };
-  return {
-    operation: {
-      create: async ({ data }: any) => {
-        const created = normalizeOperation({
-          ...makeOperation(),
-          ...data,
-          strategyId: data.strategy?.connect?.id ?? null,
-        });
-        operations.push(created);
-        return created;
-      },
-      findUnique: async ({ where }: any) => findOperation(where.id),
-      findMany: async ({
-        where,
-        skip = 0,
-        take = 100,
-        orderBy: _orderBy,
-      }: any) =>
-        operations
-          .filter((operation) => matches(operation, where))
-          .slice(skip, skip + take),
-      count: async ({ where }: any) =>
-        operations.filter((operation) => matches(operation, where)).length,
-      update: async ({ where, data }: any) => {
-        const operation = findOperation(where.id);
-        if (!operation) throw new Error("operation not found");
-        const strategyId =
-          data.strategy?.connect?.id ??
-          (data.strategy?.disconnect ? null : operation.strategyId);
-        Object.assign(operation, data, { strategyId });
-        for (const key of [
-          "strike",
-          "entryPremium",
-          "simulatedClosingPrice",
-          "actualClosingPrice",
-        ]) {
-          if (operation[key] != null)
-            operation[key] = new Decimal(operation[key]);
-        }
-        return operation;
-      },
-      delete: async ({ where }: any) => {
-        const index = operations.findIndex(
-          (operation) => operation.id === where.id,
-        );
-        const [deleted] = operations.splice(index, 1);
-        return deleted;
-      },
+  const operationDelegate = {
+    create: async ({ data }: any) => {
+      const created = normalizeOperation({
+        ...makeOperation(),
+        ...data,
+        strategyId: data.strategy?.connect?.id ?? null,
+      });
+      operations.push(created);
+      return created;
     },
+    findUnique: async ({ where }: any) => findOperation(where.id),
+    findMany: async ({
+      where,
+      skip = 0,
+      take = 100,
+      orderBy: _orderBy,
+    }: any) =>
+      operations
+        .filter((operation) => matches(operation, where))
+        .slice(skip, skip + take),
+    count: async ({ where }: any) =>
+      operations.filter((operation) => matches(operation, where)).length,
+    update: async ({ where, data }: any) => {
+      const operation = findOperation(where.id);
+      if (!operation) throw new Error("operation not found");
+      const strategyId =
+        data.strategy?.connect?.id ??
+        (data.strategy?.disconnect ? null : operation.strategyId);
+      Object.assign(operation, data, { strategyId });
+      for (const key of ["strike", "entryPremium", "simulatedClosingPrice"]) {
+        if (operation[key] != null)
+          operation[key] = new Decimal(operation[key]);
+      }
+      return operation;
+    },
+    delete: async ({ where }: any) => {
+      const index = operations.findIndex(
+        (operation) => operation.id === where.id,
+      );
+      const [deleted] = operations.splice(index, 1);
+      return deleted;
+    },
+  };
+  const operationClosureDelegate = {
+    create: async ({ data }: any) => {
+      const operation = findOperation(data.operationId);
+      if (!operation) throw new Error("operation not found");
+      const created = {
+        id: randomUUID(),
+        ...data,
+        createdAt: new Date("2026-02-01T12:00:00.000Z"),
+      };
+      operation.closures ??= [];
+      operation.closures.push(created);
+      return created;
+    },
+  };
+  let transactionTail = Promise.resolve();
+  const $transaction = async (callback: any) => {
+    let release!: () => void;
+    const previous = transactionTail;
+    transactionTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await callback({
+        operation: operationDelegate,
+        operationClosure: operationClosureDelegate,
+      });
+    } finally {
+      release();
+    }
+  };
+  return {
+    operation: operationDelegate,
+    operationClosure: operationClosureDelegate,
+    $transaction,
     strategy: {
       create: async ({ data }: any) => {
         const strategy = {
@@ -195,14 +214,30 @@ describe("HTTP integration", () => {
     expect(simulated.statusCode).toBe(200);
     expect(simulated.json().data.result).toBe("50");
 
+    const partiallyClosed = await app.inject({
+      method: "POST",
+      url: `/operations/${id}/close`,
+      payload: { quantity: 40, closedAt: "2026-01-20", actualClosingPrice: "0.6" },
+    });
+    expect(partiallyClosed.statusCode).toBe(200);
+    expect(partiallyClosed.json().data.status).toBe("PARTIALLY_CLOSED");
+    expect(partiallyClosed.json().data.closedQuantity).toBe(40);
+    expect(partiallyClosed.json().data.openQuantity).toBe(60);
+    expect(partiallyClosed.json().data.realizedResult).toBe("16");
+    expect(partiallyClosed.json().data.estimatedOpenResult).toBe("30");
+
     const closed = await app.inject({
       method: "POST",
       url: `/operations/${id}/close`,
-      payload: { closedAt: "2026-01-20", actualClosingPrice: "0.6" },
+      payload: { quantity: 60, closedAt: "2026-01-21", actualClosingPrice: "0.4" },
     });
     expect(closed.statusCode).toBe(200);
     expect(closed.json().data.status).toBe("CLOSED");
-    expect(closed.json().data.result).toBe("40");
+    expect(closed.json().data.closedQuantity).toBe(100);
+    expect(closed.json().data.openQuantity).toBe(0);
+    expect(closed.json().data.realizedResult).toBe("52");
+    expect(closed.json().data.estimatedOpenResult).toBe("0");
+    expect(closed.json().data.result).toBe("52");
   });
 
   it("creates a multi-leg strategy and exposes its consolidated result", async () => {

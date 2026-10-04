@@ -18,5 +18,15 @@ export const strategyOperationSchema = z.object({
   operationId: z.string().uuid(),
 });
 
+export const closeStrategySchema = z.object({
+  legs: z.array(z.object({
+    operationId: z.string().uuid(),
+    quantity: z.number().int().positive(),
+    actualClosingPrice: z.string().regex(/^\d+(?:\.\d{1,6})?$/),
+    closedAt: dateOnly,
+  })).min(1),
+});
+
 export type CreateStrategyInput = z.infer<typeof createStrategySchema>;
 export type UpdateStrategyInput = z.infer<typeof updateStrategySchema>;
+export type CloseStrategyInput = z.infer<typeof closeStrategySchema>;

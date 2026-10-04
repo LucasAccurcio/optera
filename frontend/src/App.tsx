@@ -26,7 +26,6 @@ import { getHealth, type HealthResponse } from "./services/api/client";
 import { Positions } from "./pages/Positions";
 import { Summary } from "./pages/Summary";
 import { Strategies } from "./pages/Strategies";
-import { Imports } from "./pages/Imports";
 
 const drawerWidth = 220;
 export function App() {
@@ -45,7 +44,6 @@ export function App() {
   const links = [
     { label: "Posições", path: "/" },
     { label: "Estratégias", path: "/strategies" },
-    { label: "Importar", path: "/imports" },
     { label: "Resumo", path: "/summary" },
   ];
   const navigation = (
@@ -134,7 +132,6 @@ export function App() {
           <Routes>
             <Route path="/" element={<Positions />} />
             <Route path="/strategies" element={<Strategies />} />
-            <Route path="/imports" element={<Imports />} />
             <Route path="/summary" element={<Summary />} />
           </Routes>
         </Container>

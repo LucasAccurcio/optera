@@ -19,6 +19,29 @@ export function calculateDte(currentDate: Date, expirationDate: string): number 
   return businessDays;
 }
 
+export function getDteStatus(dte: number | null): "normal" | "attention" | "alert" | "critical" | "expired" | null {
+  if (dte === null) return null;
+  if (dte === 0) return "expired";
+  if (dte <= 3) return "critical";
+  if (dte <= 7) return "alert";
+  if (dte <= 15) return "attention";
+  return "normal";
+}
+
+export function getDteLabel(dte: number | null): string {
+  if (dte === null) return "-";
+  if (dte === 0) return "VENCIDA";
+  const status = getDteStatus(dte);
+  const statusLabels: Record<string, string> = {
+    normal: "normal",
+    attention: "atenção",
+    alert: "alerta",
+    critical: "crítico",
+    expired: "vencida",
+  };
+  return `${dte} dia${dte !== 1 ? "s" : ""} (${statusLabels[status ?? "normal"]})`;
+}
+
 function parseDateOnly(value: string): number | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;

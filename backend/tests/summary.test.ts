@@ -12,24 +12,25 @@ describe("summary service", () => {
             entryPremium: new Decimal("1"),
             quantity: 100,
             simulatedClosingPrice: new Decimal("0.4"),
-            closedAt: null,
-            actualClosingPrice: null,
+            closures: [],
           },
           {
             side: "BUY",
             entryPremium: new Decimal("2"),
             quantity: 50,
             simulatedClosingPrice: new Decimal("3.2"),
-            closedAt: new Date("2026-02-01T00:00:00.000Z"),
-            actualClosingPrice: new Decimal("2.5"),
+            closures: [{
+              quantity: 50,
+              closedAt: new Date("2026-02-01T00:00:00.000Z"),
+              actualClosingPrice: new Decimal("2.5"),
+            }],
           },
           {
             side: "BUY",
             entryPremium: new Decimal("1"),
             quantity: 10,
             simulatedClosingPrice: new Decimal("0.5"),
-            closedAt: null,
-            actualClosingPrice: null,
+            closures: [],
           },
         ],
       },
@@ -43,6 +44,32 @@ describe("summary service", () => {
     expect(result.lossMakingOperations).toBe(1);
     expect(result.totalPremiumReceived).toBe("100");
     expect(result.totalPremiumPaid).toBe("110");
+  });
+
+  it("aggregates realized and estimated P&L for a partial closure", async () => {
+    const result = await new SummaryService({
+      operation: {
+        findMany: async () => [{
+          side: "SELL",
+          entryPremium: new Decimal("1"),
+          quantity: 100,
+          simulatedClosingPrice: new Decimal("0.4"),
+          closures: [{
+            quantity: 40,
+            actualClosingPrice: new Decimal("0.5"),
+            closedAt: new Date("2026-02-01T00:00:00.000Z"),
+          }],
+        }],
+      },
+    } as any).getSummary();
+
+    expect(result.openOperations).toBe(1);
+    expect(result.closedOperations).toBe(0);
+    expect(result.realizedResult).toBe("20");
+    expect(result.simulatedResult).toBe("36");
+    expect(result.profitableOperations).toBe(1);
+    expect(result.lossMakingOperations).toBe(0);
+    expect(result.totalPremiumReceived).toBe("100");
   });
 
   it("returns zero values when there are no operations", async () => {

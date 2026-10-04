@@ -27,6 +27,7 @@ export const createOperationSchema = z.object({
 export const updateOperationSchema = createOperationSchema.partial();
 export const simulationSchema = z.object({ simulatedClosingPrice: decimal });
 export const closeOperationSchema = z.object({
+  quantity: z.number().int().positive(),
   closedAt: dateOnly,
   actualClosingPrice: decimal,
 });
@@ -35,7 +36,7 @@ export const operationIdSchema = z.object({ id: z.string().uuid() });
 
 export const operationListQuerySchema = z
   .object({
-    status: z.enum(["ALL", "OPEN", "CLOSED"]).default("ALL"),
+  status: z.enum(["ALL", "OPEN", "PARTIALLY_CLOSED", "CLOSED"]).default("ALL"),
     asset: z.string().trim().min(1).max(40).optional(),
     optionType: z.enum(["CALL", "PUT"]).optional(),
     side: z.enum(["BUY", "SELL"]).optional(),

@@ -2,6 +2,7 @@ import fp from "fastify-plugin";
 import { z } from "zod";
 import { AppError } from "../../shared/errors.js";
 import {
+  closeStrategySchema,
   createStrategySchema,
   strategyIdSchema,
   strategyOperationSchema,
@@ -57,4 +58,10 @@ export default fp(async (app: any) => {
       ),
     }),
   );
+  app.post("/strategies/:id/close", async (request: any) => ({
+    data: await service.close(
+      parse(strategyIdSchema, request.params).id,
+      parse(closeStrategySchema, request.body),
+    ),
+  }));
 });

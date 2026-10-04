@@ -1,6 +1,15 @@
-export type OperationStatus = "OPEN" | "CLOSED";
+export type OperationStatus = "OPEN" | "PARTIALLY_CLOSED" | "CLOSED";
 export type OptionType = "CALL" | "PUT";
 export type OperationSide = "BUY" | "SELL";
+
+export interface OperationClosure {
+  id: string;
+  operationId: string;
+  quantity: number;
+  actualClosingPrice: string;
+  closedAt: string;
+  createdAt: string;
+}
 
 export interface Operation {
   id: string;
@@ -11,15 +20,18 @@ export interface Operation {
   expirationDate: string;
   strike: string;
   quantity: number;
+  closedQuantity: number;
+  openQuantity: number;
   openedAt: string;
   entryPremium: string;
   simulatedClosingPrice: string;
-  closedAt: string | null;
-  actualClosingPrice: string | null;
+  closures: OperationClosure[];
   strategyId: string | null;
   notes: string | null;
   status: OperationStatus;
   totalPremium: string;
+  realizedResult: string;
+  estimatedOpenResult: string;
   result: string;
   resultPercentage: string;
   createdAt: string;
@@ -38,6 +50,12 @@ export interface OperationInput {
   entryPremium: string;
   strategyId?: string | null;
   notes?: string | null;
+}
+
+export interface OperationCloseInput {
+  quantity: number;
+  closedAt: string;
+  actualClosingPrice: string;
 }
 
 export interface OperationFilters {

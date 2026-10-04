@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { Decimal } from "decimal.js";
 import {
-  calculateOperationResult,
+  calculateResult,
   calculateTotalPremium,
 } from "../../shared/financial/index.js";
 
@@ -26,8 +26,12 @@ export class SummaryService {
         entryPremium: true,
         quantity: true,
         simulatedClosingPrice: true,
-        closedAt: true,
-        actualClosingPrice: true,
+        closures: {
+          select: {
+            quantity: true,
+            actualClosingPrice: true,
+          },
+        },
       },
     });
     let realizedResult = new Decimal(0);
@@ -36,39 +40,56 @@ export class SummaryService {
     let totalPremiumPaid = new Decimal(0);
     let profitableOperations = 0;
     let lossMakingOperations = 0;
+    let openOperations = 0;
+    let closedOperations = 0;
 
     for (const operation of operations) {
       const totalPremium = calculateTotalPremium(
         operation.entryPremium.toString(),
         operation.quantity,
       );
-      const result = calculateOperationResult(
-        {
-          side: operation.side,
-          entryPremium: operation.entryPremium.toString(),
-          quantity: operation.quantity,
-          simulatedClosingPrice: operation.simulatedClosingPrice.toString(),
-          closedAt: operation.closedAt,
-          actualClosingPrice: operation.actualClosingPrice?.toString() ?? null,
-        },
-        operation.closedAt ? "actual" : "simulated",
+      const closures = operation.closures ?? [];
+      const closedQuantity = closures.reduce(
+        (total, closure) => total + closure.quantity,
+        0,
       );
+      if (closedQuantity > operation.quantity) {
+        throw new Error("Closed quantity exceeds initial operation quantity");
+      }
+      const openQuantity = operation.quantity - closedQuantity;
+      const realized = closures.reduce(
+        (total, closure) => total.plus(calculateResult(
+          operation.side,
+          operation.entryPremium.toString(),
+          closure.actualClosingPrice.toString(),
+          closure.quantity,
+        )),
+        new Decimal(0),
+      );
+      const estimated = openQuantity > 0
+        ? calculateResult(
+          operation.side,
+          operation.entryPremium.toString(),
+          operation.simulatedClosingPrice.toString(),
+          openQuantity,
+        )
+        : new Decimal(0);
+      const result = realized.plus(estimated);
 
       if (operation.side === "SELL")
         totalPremiumReceived = totalPremiumReceived.plus(totalPremium);
       else totalPremiumPaid = totalPremiumPaid.plus(totalPremium);
-      if (operation.closedAt) realizedResult = realizedResult.plus(result);
-      else simulatedResult = simulatedResult.plus(result);
-      if (result.isPositive()) profitableOperations += 1;
+      realizedResult = realizedResult.plus(realized);
+      simulatedResult = simulatedResult.plus(estimated);
+      if (openQuantity > 0) openOperations += 1;
+      else closedOperations += 1;
+      if (result.greaterThan(0)) profitableOperations += 1;
       if (result.isNegative()) lossMakingOperations += 1;
     }
 
     return {
-      openOperations: operations.filter((operation) => !operation.closedAt)
-        .length,
-      closedOperations: operations.filter((operation) =>
-        Boolean(operation.closedAt),
-      ).length,
+      openOperations,
+      closedOperations,
       realizedResult: realizedResult.toString(),
       simulatedResult: simulatedResult.toString(),
       profitableOperations,
