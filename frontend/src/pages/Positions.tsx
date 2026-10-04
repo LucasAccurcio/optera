@@ -64,7 +64,7 @@ const emptyForm: OperationInput = {
   side: "BUY",
   expirationDate: "",
   strike: "",
-  quantity: 1,
+  quantity: 100,
   openedAt: new Date().toISOString().slice(0, 10),
   entryPremium: "",
   strategyId: null,
@@ -192,7 +192,12 @@ function OperationForm({
             type="number"
             value={value.quantity}
             onChange={(e) => update("quantity", Number(e.target.value))}
-            inputProps={{ min: 1, step: 1 }}
+            inputProps={{ min: 100, step: 100, inputMode: "numeric" }}
+            sx={{
+              "& input[type=number]": { MozAppearance: "textfield" },
+              "& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button":
+                { WebkitAppearance: "none", margin: 0 },
+            }}
             required
           />
           <TextField
