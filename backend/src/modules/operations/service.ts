@@ -364,4 +364,8 @@ export class OperationService {
       },
     };
   }
+
+  async listAssets() {
+    return this.repository.findAssets();
+  }
 }
