@@ -67,6 +67,15 @@ export class OperationRepository {
     )].sort((a, b) => a.localeCompare(b));
   }
 
+  async findAssets(): Promise<string[]> {
+    const operations = await this.prisma.operation.findMany({
+      select: { asset: true },
+      distinct: ["asset"],
+      orderBy: { asset: "asc" },
+    });
+    return operations.map(({ asset }) => asset);
+  }
+
   transaction<T>(callback: (transaction: Prisma.TransactionClient) => Promise<T>) {
     return this.prisma.$transaction(callback, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,

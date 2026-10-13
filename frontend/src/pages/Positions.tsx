@@ -4,6 +4,7 @@ import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -34,6 +35,7 @@ import {
   refreshQuotes,
   updateOperation,
   updateSimulation,
+  getOperationAssets,
 } from "../services/api/client";
 import type {
   OperationCloseInput,
@@ -49,6 +51,10 @@ import { PriceSimulator } from "../components/PriceSimulator";
 import { normalizeAssetKey, presentQuoteIndicators } from "../shared/market/classification";
 import { calculateDte, getDteStatus, getDteLabel } from "../shared/market/dte";
 import { claimInitialRefresh } from "../shared/market/initial-refresh";
+import {
+  normalizeAssetInput,
+  tickerForAssetSelection,
+} from "../shared/market/asset-selection";
 
 const emptyFilters: OperationFilters = {
   status: "OPEN",
@@ -107,8 +113,40 @@ function OperationForm({
   onSubmit: () => void;
   onClose: () => void;
 }) {
+  const [assets, setAssets] = useState<string[]>([]);
+  const [assetInput, setAssetInput] = useState(value.asset);
+
+  useEffect(() => {
+    let active = true;
+    void getOperationAssets()
+      .then((availableAssets) => {
+        if (active) {
+          setAssets(
+            [...new Set(availableAssets.map(normalizeAssetInput).filter(Boolean))].sort(),
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setAssets([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setAssetInput(value.asset);
+  }, [value.asset]);
+
   const update = (field: keyof OperationInput, next: string | number | null) =>
     onChange({ ...value, [field]: next });
+
+  const updateAssetText = (next: string) => {
+    const normalized = normalizeAssetInput(next);
+    setAssetInput(normalized);
+    onChange({ ...value, asset: normalized, optionTicker: "" });
+  };
+
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{editing ? "Editar operação" : "Nova operação"}</DialogTitle>
@@ -121,16 +159,36 @@ function OperationForm({
             pt: 1,
           }}
         >
-          <TextField
-            label="Ativo"
-            value={value.asset}
-            onChange={(e) => update("asset", e.target.value)}
-            required
+          <Autocomplete
+            freeSolo
+            options={assets}
+            value={value.asset || null}
+            inputValue={assetInput}
+            onChange={(_, selectedAsset) => {
+              if (typeof selectedAsset !== "string") {
+                updateAssetText("");
+                return;
+              }
+              const asset = normalizeAssetInput(selectedAsset);
+              setAssetInput(asset);
+              onChange({
+                ...value,
+                asset,
+                optionTicker: tickerForAssetSelection(asset, true),
+              });
+            }}
+            onInputChange={(_, next, reason) => {
+              if (reason === "input" || reason === "clear") updateAssetText(next);
+            }}
+            noOptionsText="Nenhum ativo encontrado"
+            renderInput={(params) => (
+              <TextField {...params} label="Ativo" required />
+            )}
           />
           <TextField
             label="Ticker da opção"
             value={value.optionTicker}
-            onChange={(e) => update("optionTicker", e.target.value)}
+            onChange={(e) => update("optionTicker", normalizeAssetInput(e.target.value))}
             required
           />
           <FormControl>

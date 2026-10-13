@@ -108,6 +108,10 @@ export async function getOperations(
   return requestEnvelope<OperationListResponse>(`/operations?${params}`);
 }
 
+export function getOperationAssets(): Promise<string[]> {
+  return request<string[]>("/operations/assets");
+}
+
 export function getAvailableOperationsForStrategy() {
   return requestEnvelope<OperationListResponse>(
     "/operations/available-for-strategy",

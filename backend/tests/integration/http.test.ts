@@ -75,11 +75,19 @@ function makeDatabase() {
       where,
       skip = 0,
       take = 100,
+      select,
+      distinct,
       orderBy: _orderBy,
-    }: any) =>
-      operations
+    }: any) => {
+      if (select?.asset && distinct?.includes("asset")) {
+        return [...new Set(operations.map((operation) => operation.asset))]
+          .sort((a, b) => a.localeCompare(b))
+          .map((asset) => ({ asset }));
+      }
+      return operations
         .filter((operation) => matches(operation, where))
-        .slice(skip, skip + take),
+        .slice(skip, skip + take);
+    },
     count: async ({ where }: any) =>
       operations.filter((operation) => matches(operation, where)).length,
     update: async ({ where, data }: any) => {
@@ -238,6 +246,26 @@ describe("HTTP integration", () => {
     expect(closed.json().data.realizedResult).toBe("52");
     expect(closed.json().data.estimatedOpenResult).toBe("0");
     expect(closed.json().data.result).toBe("52");
+  });
+
+  it("lists distinct assets from open and closed operations", async () => {
+    await database.operation.create({ data: makeOperation({ asset: "PETR4" }) });
+    const closed = await database.operation.create({
+      data: makeOperation({ asset: "BBSE3" }),
+    });
+    await database.operationClosure.create({
+      data: {
+        operationId: closed.id,
+        quantity: 100,
+        actualClosingPrice: new Decimal("0.5"),
+        closedAt: new Date("2026-02-01T00:00:00.000Z"),
+      },
+    });
+
+    const response = await app.inject({ method: "GET", url: "/operations/assets" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ data: ["BBSE3", "PETR4"] });
   });
 
   it("creates a multi-leg strategy and exposes its consolidated result", async () => {

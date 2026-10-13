@@ -70,7 +70,12 @@ function prismaMock(initial: any = operation()) {
       const [removed] = records.splice(index, 1);
       return removed;
     },
-    findMany: async ({ where, skip, take }: any) => {
+    findMany: async ({ where, skip, take, select, distinct, orderBy }: any) => {
+      if (select?.asset && distinct?.includes("asset")) {
+        return [...new Set(records.map((item) => item.asset))]
+          .sort((a, b) => a.localeCompare(b))
+          .map((asset) => ({ asset }));
+      }
       const found = records.filter((item) => matches(item, where));
       return skip === undefined && take === undefined
         ? found
@@ -201,6 +206,23 @@ describe("operation service", () => {
     expect(result.meta.total).toBe(1);
     expect(result.data).toHaveLength(1);
     expect(result.data[0].strategyId).toBeNull();
+  });
+
+  it("lists distinct assets in alphabetical order, including closed operations", async () => {
+    const prisma = prismaMock([
+      operation({ asset: "PETR4" }),
+      operation({ asset: "BBSE3", closures: [closure()] }),
+      operation({ asset: "PETR4", id: "another-operation-id" }),
+    ]);
+    const service = new OperationService(prisma as any);
+
+    await expect(service.listAssets()).resolves.toEqual(["BBSE3", "PETR4"]);
+  });
+
+  it("returns an empty asset list when there are no operations", async () => {
+    const service = new OperationService(prismaMock([]) as any);
+
+    await expect(service.listAssets()).resolves.toEqual([]);
   });
 
   it("returns a not found error for missing operations", async () => {

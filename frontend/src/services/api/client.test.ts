@@ -5,6 +5,7 @@ import {
   createOperation,
   deleteStrategy,
   getHealth,
+  getOperationAssets,
   getQuotes,
   getStrategyAlerts,
   getStrategySimulation,
@@ -81,6 +82,19 @@ describe('health client', () => {
 
     await expect(getQuotes()).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:3001/quotes', {
+      headers: { Accept: 'application/json' },
+    });
+  });
+
+  it('gets operation assets from the exact assets path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: ['BBSE3'] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getOperationAssets()).resolves.toEqual(['BBSE3']);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:3001/operations/assets', {
       headers: { Accept: 'application/json' },
     });
   });
