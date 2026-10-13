@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
@@ -50,7 +50,6 @@ import { OperationCloseDialog } from "../components/OperationCloseDialog";
 import { PriceSimulator } from "../components/PriceSimulator";
 import { normalizeAssetKey, presentQuoteIndicators } from "../shared/market/classification";
 import { calculateDte, getDteStatus, getDteLabel } from "../shared/market/dte";
-import { claimInitialRefresh } from "../shared/market/initial-refresh";
 import {
   normalizeAssetInput,
   tickerForAssetSelection,
@@ -511,7 +510,6 @@ export function Positions() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [quotes, setQuotes] = useState<QuoteResponse | null>(null);
   const [refreshingQuotes, setRefreshingQuotes] = useState(false);
-  const initialRefreshClaim = useRef(false);
   const quoteByAsset = new Map(
     (quotes?.data ?? []).map((quote) => [normalizeAssetKey(quote.asset), quote]),
   );
@@ -548,9 +546,6 @@ export function Positions() {
       setRefreshingQuotes(false);
     }
   };
-  useEffect(() => {
-    if (claimInitialRefresh(initialRefreshClaim)) void refreshMarketQuotes();
-  }, []);
   const openCreate = () => {
     setEditing(null);
     setForm({ ...emptyForm, openedAt: new Date().toISOString().slice(0, 10) });
