@@ -51,7 +51,7 @@ const partialOperation: Operation = {
   openQuantity: 60,
   openedAt: "2026-01-10",
   entryPremium: "1",
-  simulatedClosingPrice: "0.4",
+  simulatedClosingPrice: "0,4",
   closures: [],
   strategyId: null,
   notes: null,

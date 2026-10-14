@@ -12,6 +12,7 @@ import type {
   StrategySimulation,
 } from "../../types/strategies";
 import type { Summary } from "../../types/summary";
+import { normalizeDecimalInput } from "../../shared/numeric/decimal-input";
 
 export type HealthResponse = {
   status: string;
@@ -27,10 +28,6 @@ export type { QuoteResponse } from "../../types/operations";
 const baseUrl = (
   import.meta.env.VITE_API_URL ?? "http://localhost:3001"
 ).replace(/\/$/, "");
-
-export function normalizeDecimalInput(value: string): string {
-  return value.trim().replace(",", ".");
-}
 
 function normalizeOperationInput(input: OperationInput): OperationInput {
   return {

@@ -54,6 +54,7 @@ import {
   normalizeAssetInput,
   tickerForAssetSelection,
 } from "../shared/market/asset-selection";
+import { isValidDecimalInput } from "../shared/numeric/decimal-input";
 
 const emptyFilters: OperationFilters = {
   status: "OPEN",
@@ -274,7 +275,11 @@ function OperationForm({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancelar</Button>
-        <Button variant="contained" onClick={onSubmit} disabled={saving}>
+        <Button
+          variant="contained"
+          onClick={onSubmit}
+          disabled={saving || !isValidDecimalInput(value.strike) || !isValidDecimalInput(value.entryPremium)}
+        >
           {saving
             ? "Salvando..."
             : editing

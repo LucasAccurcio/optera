@@ -10,6 +10,11 @@ import {
 } from "@mui/material";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import type { Operation } from "../types/operations";
+import {
+  isDecimalInputBeingEdited,
+  isValidDecimalInput,
+  normalizeDecimalInput,
+} from "../shared/numeric/decimal-input";
 
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -29,9 +34,9 @@ export function PriceSimulator({
   onSave,
 }: PriceSimulatorProps) {
   const [price, setPrice] = useState(operation.simulatedClosingPrice);
-  const maximum = Math.max(Number(operation.entryPremium) * 2, 0.01);
-  const numericPrice = Number(price);
-  const premium = Number(operation.entryPremium);
+  const maximum = Math.max(Number(normalizeDecimalInput(operation.entryPremium)) * 2, 0.01);
+  const numericPrice = Number(normalizeDecimalInput(price));
+  const premium = Number(normalizeDecimalInput(operation.entryPremium));
   const openQuantity = operation.openQuantity;
   const result =
     operation.side === "SELL"
@@ -46,7 +51,7 @@ export function PriceSimulator({
   );
 
   const setSafePrice = (value: string) => {
-    if (value === "" || /^\d*(\.\d{0,6})?$/.test(value)) setPrice(value);
+    if (isDecimalInputBeingEdited(value)) setPrice(value);
   };
 
   return (
@@ -104,7 +109,7 @@ export function PriceSimulator({
       >
         <TextField
           label="Preço simulado"
-          value={price}
+          value={formatMoney(numericPrice)}
           onChange={(event) => setSafePrice(event.target.value)}
           inputProps={{ inputMode: "decimal" }}
           size="small"
@@ -120,7 +125,7 @@ export function PriceSimulator({
           variant="outlined"
           size="small"
           startIcon={<SaveOutlinedIcon />}
-          disabled={saving || price === "" || Number(price) < 0}
+          disabled={saving || !isValidDecimalInput(price) || numericPrice < 0}
           onClick={() => onSave(price)}
           sx={{ ml: { sm: "auto" } }}
         >

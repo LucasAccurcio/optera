@@ -35,6 +35,7 @@ import {
   removeStrategyOperation,
   setStrategyAssetPrice,
 } from "../services/api/client";
+import { isValidDecimalInput } from "../shared/numeric/decimal-input";
 import type { Operation } from "../types/operations";
 import type {
   Strategy,
@@ -245,7 +246,7 @@ export function Strategies() {
 
   const simulateExpiration = async (strategyId: string) => {
     const price = scenarioPrices[strategyId] ?? "";
-    if (!price) return;
+    if (!isValidDecimalInput(price)) return;
     try {
       await setStrategyAssetPrice(strategyId, price);
       const simulation = await getStrategySimulation(strategyId);
@@ -517,7 +518,7 @@ export function Strategies() {
                       />
                       <Button
                         variant="outlined"
-                        disabled={!scenarioPrices[strategy.id]?.trim()}
+                        disabled={!isValidDecimalInput(scenarioPrices[strategy.id] ?? "")}
                         onClick={() => void simulateExpiration(strategy.id)}
                       >
                         Calcular cenário
@@ -683,7 +684,7 @@ export function Strategies() {
                         onClick={() => void saveStrategyClose()}
                         disabled={saving || strategy.operations
                           .filter((leg) => leg.openQuantity > 0)
-                          .some((leg) => !closeValues[leg.id]?.closedAt || !closeValues[leg.id]?.actualClosingPrice.trim())}
+                          .some((leg) => !closeValues[leg.id]?.closedAt || !isValidDecimalInput(closeValues[leg.id]?.actualClosingPrice ?? ""))}
                       >
                         {saving ? "Encerrando..." : "Confirmar encerramento"}
                       </Button>

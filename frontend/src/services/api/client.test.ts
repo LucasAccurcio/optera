@@ -9,10 +9,10 @@ import {
   getQuotes,
   getStrategyAlerts,
   getStrategySimulation,
-  normalizeDecimalInput,
   refreshQuotes,
   setStrategyAssetPrice,
 } from './client';
+import { normalizeDecimalInput } from '../../shared/numeric/decimal-input';
 
 describe('health client', () => {
   it('rejects non-success responses', async () => {

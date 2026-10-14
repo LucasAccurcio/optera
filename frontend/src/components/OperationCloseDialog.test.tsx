@@ -53,7 +53,7 @@ const operation: Operation = {
   openQuantity: 60,
   openedAt: "2026-01-10",
   entryPremium: "1",
-  simulatedClosingPrice: "0.4",
+  simulatedClosingPrice: "0,4",
   closures: [],
   strategyId: null,
   notes: null,
@@ -80,7 +80,8 @@ describe("OperationCloseDialog", () => {
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain("Quantidade a encerrar");
     expect(markup).toContain('value="60"');
-    expect(markup).toContain('value="0.4"');
+    expect(markup).toContain('value="0,4"');
+    expect(markup).not.toContain('disabled=""');
     expect(markup).toContain("Preço efetivo de encerramento");
   });
 });
